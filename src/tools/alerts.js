@@ -7,8 +7,9 @@ export function registerAlertTools(server) {
     condition: z.string().describe('Alert condition: "crossing", "greater_than", or "less_than"'),
     price: z.coerce.number().describe('Price level for the alert'),
     message: z.string().optional().describe('Alert message'),
-  }, async ({ condition, price, message }) => {
-    try { return jsonResult(await core.create({ condition, price, message })); }
+    name: z.string().optional().describe('Alert name (shown in TradingView\'s Alert name field, and in the alert list UI)'),
+  }, async ({ condition, price, message, name }) => {
+    try { return jsonResult(await core.create({ condition, price, message, name })); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 

@@ -15,7 +15,7 @@ const CONDITION_TYPE_MAP = {
   less_than: 'less', less: 'less', below: 'less', '<': 'less',
 };
 
-export async function create({ condition, price, message }) {
+export async function create({ condition, price, message, name }) {
   const p = requireFinite(price, 'price');
   const condType = CONDITION_TYPE_MAP[String(condition || 'crossing').trim().toLowerCase()] || 'cross';
 
@@ -28,6 +28,7 @@ export async function create({ condition, price, message }) {
         var price = ${JSON.stringify(p)};
         var condType = ${safeString(condType)};
         var msg = ${safeString(message || '')};
+        var nm = ${safeString(name || '')};
         if (!msg) {
           var verb = condType === 'greater' ? 'above' : (condType === 'less' ? 'below' : 'crossing');
           msg = sym.split(':').pop() + ' ' + verb + ' ' + price;
@@ -41,7 +42,7 @@ export async function create({ condition, price, message }) {
           sound_file: 'alert/fired', sound_duration: 0,
           popup: true, auto_deactivate: true,
           email: false, sms_over_email: false, mobile_push: true,
-          web_hook: null, name: null,
+          web_hook: null, name: nm || null,
           expiration: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
           active: true, ignore_warnings: true
         };
@@ -53,7 +54,7 @@ export async function create({ condition, price, message }) {
         var data = {};
         try { data = JSON.parse(x.responseText); } catch (e) {}
         if (data.s === 'ok') {
-          return { success: true, source: 'internal_api', symbol: sym, price: price, condition: condType, message: msg, alert_id: (data.r && data.r.alert_id) || null };
+          return { success: true, source: 'internal_api', symbol: sym, price: price, condition: condType, message: msg, name: nm || null, alert_id: (data.r && data.r.alert_id) || null };
         }
         return { success: false, source: 'internal_api', error: (data.err && data.err.code) || data.errmsg || ('HTTP ' + x.status), response: (x.responseText || '').slice(0, 200) };
       } catch (e) {
@@ -78,6 +79,7 @@ export async function list() {
               alert_id: a.alert_id,
               symbol: sym,
               type: a.type,
+              name: a.name,
               message: a.message,
               active: a.active,
               condition: a.condition,
