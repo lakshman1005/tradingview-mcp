@@ -8,8 +8,10 @@ export function registerAlertTools(server) {
     price: z.coerce.number().describe('Price level for the alert'),
     message: z.string().optional().describe('Alert message'),
     name: z.string().optional().describe('Alert name (shown in TradingView\'s Alert name field, and in the alert list UI)'),
-  }, async ({ condition, price, message, name }) => {
-    try { return jsonResult(await core.create({ condition, price, message, name })); }
+    webhook: z.string().optional().describe('Webhook URL to POST the message to when the alert fires. OMIT THIS AND THE ALERT DISPATCHES NOTHING — it will fire, update last_fire_time and show a popup, but no request is ever sent.'),
+    email: z.boolean().optional().describe('Also send the email notification (default false)'),
+  }, async ({ condition, price, message, name, webhook, email }) => {
+    try { return jsonResult(await core.create({ condition, price, message, name, webhook, email })); }
     catch (err) { return jsonResult({ success: false, error: err.message }, true); }
   });
 

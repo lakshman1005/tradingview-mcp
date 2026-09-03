@@ -15,9 +15,21 @@ const CONDITION_TYPE_MAP = {
   less_than: 'less', less: 'less', below: 'less', '<': 'less',
 };
 
-export async function create({ condition, price, message, name }) {
+export async function create({ condition, price, message, name, webhook, email }) {
   const p = requireFinite(price, 'price');
   const condType = CONDITION_TYPE_MAP[String(condition || 'crossing').trim().toLowerCase()] || 'cross';
+  // ⚠️ web_hook and email used to be HARDCODED to null/false here (fixed 2026-09-03).
+  // An alert created that way fires, updates last_fire_time and shows a popup — and
+  // dispatches NOTHING. That is invisible unless you diff TradingView's alert log
+  // against your own server's access log: the Log panel entry simply has no delivery
+  // status line under it, neither success nor failure.
+  //
+  // It cost a missed entry signal and, worse, left 17 script-created STOP-LOSS alerts
+  // silently unable to fire. Callers that put a webhook JSON payload in `message`
+  // (e.g. zerodha-api/tv_price_alert.py) were the ones most affected: the message was
+  // perfect, and there was no channel to send it on.
+  const hook = (typeof webhook === 'string' && webhook.trim()) ? webhook.trim() : null;
+  const wantEmail = email === true;
 
   return evaluate(`
     (function() {
@@ -29,6 +41,8 @@ export async function create({ condition, price, message, name }) {
         var condType = ${safeString(condType)};
         var msg = ${safeString(message || '')};
         var nm = ${safeString(name || '')};
+        var hook = ${hook === null ? 'null' : safeString(hook)};
+        var wantEmail = ${wantEmail ? 'true' : 'false'};
         if (!msg) {
           var verb = condType === 'greater' ? 'above' : (condType === 'less' ? 'below' : 'crossing');
           msg = sym.split(':').pop() + ' ' + verb + ' ' + price;
@@ -41,8 +55,8 @@ export async function create({ condition, price, message, name }) {
           message: msg,
           sound_file: 'alert/fired', sound_duration: 0,
           popup: true, auto_deactivate: true,
-          email: false, sms_over_email: false, mobile_push: true,
-          web_hook: null, name: nm || null,
+          email: wantEmail, sms_over_email: false, mobile_push: true,
+          web_hook: hook, name: nm || null,
           expiration: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
           active: true, ignore_warnings: true
         };
@@ -54,7 +68,7 @@ export async function create({ condition, price, message, name }) {
         var data = {};
         try { data = JSON.parse(x.responseText); } catch (e) {}
         if (data.s === 'ok') {
-          return { success: true, source: 'internal_api', symbol: sym, price: price, condition: condType, message: msg, name: nm || null, alert_id: (data.r && data.r.alert_id) || null };
+          return { success: true, source: 'internal_api', symbol: sym, price: price, condition: condType, message: msg, name: nm || null, web_hook: hook, email: wantEmail, alert_id: (data.r && data.r.alert_id) || null };
         }
         return { success: false, source: 'internal_api', error: (data.err && data.err.code) || data.errmsg || ('HTTP ' + x.status), response: (x.responseText || '').slice(0, 200) };
       } catch (e) {
@@ -87,6 +101,17 @@ export async function list() {
               created: a.create_time,
               last_fired: a.last_fire_time,
               expiration: a.expiration,
+              // Notification channels — surfaced 2026-09-03. These were dropped here,
+              // which is what made a silently-unarmed alert impossible to audit: the
+              // API returns them, the mapping just threw them away. An alert with
+              // web_hook null and email false fires and dispatches NOTHING.
+              web_hook: a.web_hook || null,
+              email: !!a.email,
+              popup: !!a.popup,
+              mobile_push: !!a.mobile_push,
+              // Why TradingView last refused/stopped it, when it says anything.
+              last_error: a.last_error || null,
+              last_stop_reason: a.last_stop_reason || null,
             };
           })
         };
